@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Danh mục & Thương hiệu — Top-N + Phân trang</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:1rem}
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-indigo-600 text-white">
+    <div class="max-w-7xl mx-auto p-4">
+      <h1 class="text-xl font-bold">Tổng hợp sản phẩm theo Danh mục & Thương hiệu (quy mô lớn)</h1>
+      <p class="text-sm text-indigo-100">Hỗ trợ Top-N, gộp phần còn lại thành "Khác", bảng có tìm kiếm & phân trang.</p>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- DANH MỤC (TRÁI) -->
+    <section class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-indigo-600 flex items-center gap-2"><i class="fa-solid fa-list"></i> Danh mục</h2>
+        <div class="flex items-center gap-2 text-sm">
+          <label>Top</label>
+          <select id="catTop" class="border rounded px-2 py-1">
+            <option>5</option><option selected>10</option><option>20</option><option>30</option>
+          </select>
+          <label class="flex items-center gap-1 ml-2"><input id="catOthers" type="checkbox" class="accent-indigo-600" checked/> Gộp "Khác"</label>
+        </div>
+      </div>
+      <div class="overflow-auto">
+        <canvas id="categoryChart" height="300"></canvas>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between gap-2">
+        <input id="catSearch" placeholder="Tìm danh mục..." class="w-full border rounded px-3 py-2 text-sm"/>
+        <div class="flex items-center gap-2">
+          <button id="catPrev" class="px-3 py-2 border rounded text-sm">«</button>
+          <span id="catPage" class="text-sm"></span>
+          <button id="catNext" class="px-3 py-2 border rounded text-sm">»</button>
+        </div>
+      </div>
+
+      <table class="w-full mt-3 text-sm border-collapse border border-gray-200">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="border p-2 text-left">Danh mục</th>
+            <th class="border p-2 text-right">Số sản phẩm</th>
+          </tr>
+        </thead>
+        <tbody id="catTBody"></tbody>
+      </table>
+    </section>
+
+    <!-- THƯƠNG HIỆU (PHẢI) -->
+    <section class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-green-600 flex items-center gap-2"><i class="fa-solid fa-tags"></i> Thương hiệu</h2>
+        <div class="flex items-center gap-2 text-sm">
+          <label>Top</label>
+          <select id="brandTop" class="border rounded px-2 py-1">
+            <option>5</option><option selected>10</option><option>20</option><option>30</option>
+          </select>
+          <label class="flex items-center gap-1 ml-2"><input id="brandOthers" type="checkbox" class="accent-green-600" checked/> Gộp "Khác"</label>
+        </div>
+      </div>
+      <div class="overflow-auto">
+        <canvas id="brandChart" height="300"></canvas>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between gap-2">
+        <input id="brandSearch" placeholder="Tìm thương hiệu..." class="w-full border rounded px-3 py-2 text-sm"/>
+        <div class="flex items-center gap-2">
+          <button id="brandPrev" class="px-3 py-2 border rounded text-sm">«</button>
+          <span id="brandPage" class="text-sm"></span>
+          <button id="brandNext" class="px-3 py-2 border rounded text-sm">»</button>
+        </div>
+      </div>
+
+      <table class="w-full mt-3 text-sm border-collapse border border-gray-200">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="border p-2 text-left">Thương hiệu</th>
+            <th class="border p-2 text-right">Số sản phẩm</th>
+          </tr>
+        </thead>
+        <tbody id="brandTBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    // ===== DỮ LIỆU MẪU LỚN (120 danh mục & 120 thương hiệu) =====
+    function makeDummy(prefix, n){
+      return Array.from({length:n}, (_,i)=>({ name: `${prefix} ${i+1}`, count: Math.floor(Math.random()*80)+1 }));
+    }
+    const categories = makeDummy('Danh mục', 120);
+    const brands = makeDummy('Thương hiệu', 120);
+
+    // ===== TIỆN ÍCH CHUNG =====
+    function topNWithOthers(items, n, useOthers){
+      const sorted = [...items].sort((a,b)=>b.count-a.count);
+      const top = sorted.slice(0,n);
+      if(!useOthers || sorted.length<=n) return top;
+      const rest = sorted.slice(n);
+      const sumRest = rest.reduce((s,x)=>s+x.count,0);
+      return [...top, {name:'Khác', count: sumRest}];
+    }
+
+    // ===== BIỂU ĐỒ DANH MỤC =====
+    const catCtx = document.getElementById('categoryChart');
+    let catChart = new Chart(catCtx, {type:'bar', data:{labels:[], datasets:[{label:'Số sản phẩm', data:[]}]}, options:{indexAxis:'y', responsive:true, scales:{x:{beginAtZero:true}}, plugins:{legend:{display:false}}}});
+    function renderCatChart(){
+      const n = parseInt(document.getElementById('catTop').value,10);
+      const useOthers = document.getElementById('catOthers').checked;
+      const ds = topNWithOthers(categories, n, useOthers);
+      catChart.data.labels = ds.map(x=>x.name);
+      catChart.data.datasets[0].data = ds.map(x=>x.count);
+      catChart.update();
+    }
+
+    // ===== BẢNG DANH MỤC (tìm kiếm + phân trang) =====
+    const catTBody = document.getElementById('catTBody');
+    const catSearch = document.getElementById('catSearch');
+    const catPage = document.getElementById('catPage');
+    let catPageIdx = 1; const pageSize = 10;
+    function getFiltered(arr, q){ q=q.trim().toLowerCase(); return q?arr.filter(x=>x.name.toLowerCase().includes(q)):arr; }
+    function renderCatTable(){
+      const list = getFiltered(categories, catSearch.value).sort((a,b)=>b.count-a.count);
+      const totalPages = Math.max(1, Math.ceil(list.length/pageSize));
+      catPageIdx = Math.min(catPageIdx, totalPages);
+      const slice = list.slice((catPageIdx-1)*pageSize, catPageIdx*pageSize);
+      catTBody.innerHTML = slice.map(r=>`<tr><td class="border p-2">${r.name}</td><td class="border p-2 text-right">${r.count}</td></tr>`).join('');
+      catPage.textContent = `${catPageIdx}/${totalPages}`;
+      document.getElementById('catPrev').disabled = catPageIdx===1;
+      document.getElementById('catNext').disabled = catPageIdx===totalPages;
+    }
+
+    // ===== BIỂU ĐỒ THƯƠNG HIỆU =====
+    const brandCtx = document.getElementById('brandChart');
+    let brandChart = new Chart(brandCtx, {type:'bar', data:{labels:[], datasets:[{label:'Số sản phẩm', data:[]}]}, options:{indexAxis:'y', responsive:true, scales:{x:{beginAtZero:true}}, plugins:{legend:{display:false}}}});
+    function renderBrandChart(){
+      const n = parseInt(document.getElementById('brandTop').value,10);
+      const useOthers = document.getElementById('brandOthers').checked;
+      const ds = topNWithOthers(brands, n, useOthers);
+      brandChart.data.labels = ds.map(x=>x.name);
+      brandChart.data.datasets[0].data = ds.map(x=>x.count);
+      brandChart.update();
+    }
+
+    // ===== BẢNG THƯƠNG HIỆU =====
+    const brandTBody = document.getElementById('brandTBody');
+    const brandSearch = document.getElementById('brandSearch');
+    const brandPage = document.getElementById('brandPage');
+    let brandPageIdx = 1;
+    function renderBrandTable(){
+      const list = getFiltered(brands, brandSearch.value).sort((a,b)=>b.count-a.count);
+      const totalPages = Math.max(1, Math.ceil(list.length/pageSize));
+      brandPageIdx = Math.min(brandPageIdx, totalPages);
+      const slice = list.slice((brandPageIdx-1)*pageSize, brandPageIdx*pageSize);
+      brandTBody.innerHTML = slice.map(r=>`<tr><td class="border p-2">${r.name}</td><td class="border p-2 text-right">${r.count}</td></tr>`).join('');
+      brandPage.textContent = `${brandPageIdx}/${totalPages}`;
+      document.getElementById('brandPrev').disabled = brandPageIdx===1;
+      document.getElementById('brandNext').disabled = brandPageIdx===totalPages;
+    }
+
+    // ===== SỰ KIỆN =====
+    document.getElementById('catTop').addEventListener('change', renderCatChart);
+    document.getElementById('catOthers').addEventListener('change', renderCatChart);
+    document.getElementById('brandTop').addEventListener('change', renderBrandChart);
+    document.getElementById('brandOthers').addEventListener('change', renderBrandChart);
+
+    catSearch.addEventListener('input', ()=>{catPageIdx=1; renderCatTable();});
+    document.getElementById('catPrev').addEventListener('click', ()=>{catPageIdx--; renderCatTable();});
+    document.getElementById('catNext').addEventListener('click', ()=>{catPageIdx++; renderCatTable();});
+
+    brandSearch.addEventListener('input', ()=>{brandPageIdx=1; renderBrandTable();});
+    document.getElementById('brandPrev').addEventListener('click', ()=>{brandPageIdx--; renderBrandTable();});
+    document.getElementById('brandNext').addEventListener('click', ()=>{brandPageIdx++; renderBrandTable();});
+
+    // Khởi tạo
+    renderCatChart();
+    renderBrandChart();
+    renderCatTable();
+    renderBrandTable();
+  </script>
+</body>
+</html>

@@ -14,7 +14,7 @@ Website bán rượu vang trực tuyến: quản lý sản phẩm, giỏ hàng, 
 - [Admin] Quản lý sản phẩm, danh mục, đơn hàng, người dùng
 - Chat/Thông báo (tùy cấu hình)
 - Tối ưu CRUD, phân trang, validate form
-
+- Tích hợp thanh toán VNPay/MoMo
  🧩 Cấu trúc thư mục tiêu biểu
 - `app/`, `routes/`, `resources/`, `database/`, `public/` (chuẩn Laravel)
 - `routes/web.php` — định tuyến web
